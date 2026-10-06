@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>emailrecon — email OSINT in your browser</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel2:#0f151d; --line:#1f2a37;
+    --txt:#e6edf3; --dim:#8b98a5; --accent:#3fb950; --found:#3fb950;
+    --clean:#6e7681; --unk:#d29922; --rate:#bc8cff; --err:#f85149; --blue:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--blue)}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:22px;margin:0 0 4px}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--dim);margin:0 0 22px;font-size:13.5px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  label{display:block;font-size:12px;color:var(--dim);margin:0 0 5px;text-transform:uppercase;letter-spacing:.04em}
+  input,select,button{font:inherit}
+  input[type=text],input[type=number],select{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:10px 12px;outline:none}
+  input:focus,select:focus{border-color:var(--blue)}
+  .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .grid3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:12px}
+  .cf{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;text-transform:uppercase}
+  .cf-high{background:rgba(63,185,80,.2);color:#3fb950}
+  .cf-medium{background:rgba(88,166,255,.18);color:#58a6ff}
+  .cf-low{background:rgba(210,153,34,.18);color:#d29922}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .mt{margin-top:14px}
+  button{cursor:pointer;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--txt);padding:10px 16px}
+  button:hover{border-color:var(--blue)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04170a;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+  .chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;
+    padding:6px 12px;font-size:13px;color:var(--dim)}
+  .chip b{color:var(--txt)}
+  .bar{height:6px;background:var(--panel2);border-radius:999px;overflow:hidden;margin:14px 0 4px}
+  .bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em;
+     position:sticky;top:0;background:var(--panel);cursor:pointer}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .st{font-weight:700;font-size:11.5px;padding:2px 8px;border-radius:6px;display:inline-block;white-space:nowrap}
+  .s-registered{background:rgba(63,185,80,.16);color:var(--found)}
+  .s-not_registered{background:rgba(110,118,129,.16);color:var(--clean)}
+  .s-unknown{background:rgba(210,153,34,.16);color:var(--unk)}
+  .s-rate_limited{background:rgba(188,140,255,.16);color:var(--rate)}
+  .s-error{background:rgba(248,81,73,.16);color:var(--err)}
+  .dom{color:var(--dim);font-size:12.5px}
+  .det{color:var(--dim);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .warn{border-color:#5a3a12;background:#1c1509}
+  .warn b{color:var(--unk)}
+  .hide{display:none}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
+    border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12.5px}
+  footer{color:var(--dim);font-size:12.5px;margin-top:26px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>email<span>recon</span></h1>
+  <p class="sub">Check whether an email address is registered across 116 public websites — in parallel, in your browser.</p>
+
+  <div class="card">
+    <div class="grid">
+      <div>
+        <label for="email">Email address</label>
+        <input id="email" type="text" placeholder="someone@example.com" autocomplete="off" spellcheck="false" />
+      </div>
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="backend">Backend (local server — recommended)</option>
+          <option value="live">Live checks (needs CORS proxy)</option>
+          <option value="demo">Demo (simulated)</option>
+        </select>
+      </div>
+      <div>
+        <label for="conc">Concurrency</label>
+        <input id="conc" type="number" min="1" max="80" value="20" />
+      </div>
+    </div>
+    <div class="grid3">
+      <div>
+        <label for="backend">Backend URL (local server — cookies &amp; CORS handled)</label>
+        <input id="backend" type="text" placeholder="http://127.0.0.1:8777" autocomplete="off" spellcheck="false" />
+      </div>
+      <div>
+        <label for="proxy">CORS proxy prefix (live mode only)</label>
+        <input id="proxy" type="text" placeholder="https://your-cors-proxy/?url=" autocomplete="off" spellcheck="false" />
+      </div>
+      <div>
+        <label for="timeout">Timeout per site (seconds)</label>
+        <input id="timeout" type="number" min="3" max="60" value="12" />
+      </div>
+    </div>
+    <div class="row mt">
+      <button id="run" class="primary">Run scan</button>
+      <button id="stop" disabled>Stop</button>
+      <button id="impbtn">Import results JSON…</button>
+      <input id="impfile" type="file" accept=".json,application/json" class="hide" />
+      <span id="status" class="note"></span>
+    </div>
+    <div class="bar"><i id="prog"></i></div>
+  </div>
+
+  <div class="card warn" id="corsnote">
+    <b>Two ways to run.</b> <b>Backend</b> mode is the reliable one: start
+    <code>server.py</code>, put its URL above (e.g. <code>http://127.0.0.1:8777</code>), and the
+    checks run server-side — no CORS, and cookies work normally, so the cookie-based checks
+    (LastPass, Eventbrite, Strava, Zoho…) work too. <b>Live</b> mode calls the sites straight
+    from the page, which browsers block without a CORS proxy. <b>Demo</b> simulates results for
+    exploring the UI. Every hit is graded by confidence and links to the site so you can verify
+    it. Use only on addresses you own or are authorised to check.
+  </div>
+
+  <div id="resultsWrap" class="hide">
+    <div class="chips" id="chips"></div>
+    <div class="row" style="margin-bottom:10px">
+      <label style="margin:0"><input type="checkbox" id="onlyFound" /> only show hits</label>
+      <select id="catFilter" style="width:auto;margin-left:8px"><option value="">all categories</option></select>
+      <span class="row" style="margin-left:auto;gap:8px">
+        <button id="expjson">Export JSON</button>
+        <button id="expcsv">Export CSV</button>
+      </span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="max-height:62vh;overflow:auto">
+        <table id="tbl">
+          <thead><tr>
+            <th data-k="status">Status</th><th data-k="name">Site</th>
+            <th data-k="domain">Domain</th><th data-k="category">Category</th>
+            <th data-k="method">Method</th><th data-k="confidence">Confidence</th>
+            <th data-k="detail">Detail</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    A hit means an account <b>may</b> exist — verify before relying on it. No logins, no
+    password attempts, no private data: every check calls the same public
+    "is this email available?" endpoint the site's own sign-up or reset form uses.
+    <br/>Based on the open-source project holehe (GPL-3.0). This page: GPL-3.0.
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* ===================================================================== *
+ *  emailrecon — single-file browser build
+ * ===================================================================== */
+
+/* ---------- tiny md5 (for Gravatar) ---------- */
+function md5(str){
+  function rl(n,c){return (n<<c)|(n>>>(32-c));}
+  function au(x,y){var l=(x&0xFFFF)+(y&0xFFFF);return (((x>>16)+(y>>16)+(l>>16))<<16)|(l&0xFFFF);}
+  function cmn(q,a,b,x,s,t){return au(rl(au(au(a,q),au(x,t)),s),b);}
+  function ff(a,b,c,d,x,s,t){return cmn((b&c)|((~b)&d),a,b,x,s,t);}
+  function gg(a,b,c,d,x,s,t){return cmn((b&d)|(c&(~d)),a,b,x,s,t);}
+  function hh(a,b,c,d,x,s,t){return cmn(b^c^d,a,b,x,s,t);}
+  function ii(a,b,c,d,x,s,t){return cmn(c^(b|(~d)),a,b,x,s,t);}
+  function tb(s){var i,n=s.length*8,o=[],x=[],b=0;
+    for(i=0;i<n;i+=8){x[i>>5]=(x[i>>5]||0)|((s.charCodeAt(i/8)&0xFF)<<(i%32));}
+    x[n>>5]=(x[n>>5]||0)|(0x80<<(n%32)); x[(((n+64)>>>9)<<4)+14]=n;
+    var a=1732584193,b2=-271733879,c=-1732584194,d=271733878;
+    for(i=0;i<x.length;i+=16){
+      var oa=a,ob=b2,oc=c,od=d;
+      a=ff(a,b2,c,d,x[i]|0,7,-680876936);d=ff(d,a,b2,c,x[i+1]|0,12,-389564586);
+      c=ff(c,d,a,b2,x[i+2]|0,17,606105819);b2=ff(b2,c,d,a,x[i+3]|0,22,-1044525330);
+      a=ff(a,b2,c,d,x[i+4]|0,7,-176418897);d=ff(d,a,b2,c,x[i+5]|0,12,1200080426);
+      c=ff(c,d,a,b2,x[i+6]|0,17,-1473231341);b2=ff(b2,c,d,a,x[i+7]|0,22,-45705983);
+      a=ff(a,b2,c,d,x[i+8]|0,7,1770035416);d=ff(d,a,b2,c,x[i+9]|0,12,-1958414417);
+      c=ff(c,d,a,b2,x[i+10]|0,17,-42063);b2=ff(b2,c,d,a,x[i+11]|0,22,-1990404162);
+      a=ff(a,b2,c,d,x[i+12]|0,7,1804603682);d=ff(d,a,b2,c,x[i+13]|0,12,-40341101);
+      c=ff(c,d,a,b2,x[i+14]|0,17,-1502002290);b2=ff(b2,c,d,a,x[i+15]|0,22,1236535329);
+      a=gg(a,b2,c,d,x[i+1]|0,5,-165796510);d=gg(d,a,b2,c,x[i+6]|0,9,-1069501632);
+      c=gg(c,d,a,b2,x[i+11]|0,14,643717713);b2=gg(b2,c,d,a,x[i]|0,20,-373897302);
+      a=gg(a,b2,c,d,x[i+5]|0,5,-701558691);d=gg(d,a,b2,c,x[i+10]|0,9,38016083);
+      c=gg(c,d,a,b2,x[i+15]|0,14,-660478335);b2=gg(b2,c,d,a,x[i+4]|0,20,-405537848);
+      a=gg(a,b2,c,d,x[i+9]|0,5,568446438);d=gg(d,a,b2,c,x[i+14]|0,9,-1019803690);
+      c=gg(c,d,a,b2,x[i+3]|0,14,-187363961);b2=gg(b2,c,d,a,x[i+8]|0,20,1163531501);
+      a=gg(a,b2,c,d,x[i+13]|0,5,-1444681467);d=gg(d,a,b2,c,x[i+2]|0,9,-51403784);
+      c=gg(c,d,a,b2,x[i+7]|0,14,1735328473);b2=gg(b2,c,d,a,x[i+12]|0,20,-1926607734);
+      a=hh(a,b2,c,d,x[i+5]|0,4,-378558);d=hh(d,a,b2,c,x[i+8]|0,11,-2022574463);
+      c=hh(c,d,a,b2,x[i+11]|0,16,1839030562);b2=hh(b2,c,d,a,x[i+14]|0,23,-35309556);
+      a=hh(a,b2,c,d,x[i+1]|0,4,-1530992060);d=hh(d,a,b2,c,x[i+4]|0,11,1272893353);
+      c=hh(c,d,a,b2,x[i+7]|0,16,-155497632);b2=hh(b2,c,d,a,x[i+10]|0,23,-1094730640);
+      a=hh(a,b2,c,d,x[i+13]|0,4,681279174);d=hh(d,a,b2,c,x[i]|0,11,-358537222);
+      c=hh(c,d,a,b2,x[i+3]|0,16,-722521979);b2=hh(b2,c,d,a,x[i+6]|0,23,76029189);
+      a=hh(a,b2,c,d,x[i+9]|0,4,-640364487);d=hh(d,a,b2,c,x[i+12]|0,11,-421815835);
+      c=hh(c,d,a,b2,x[i+15]|0,16,530742520);b2=hh(b2,c,d,a,x[i+2]|0,23,-995338651);
+      a=ii(a,b2,c,d,x[i]|0,6,-198630844);d=ii(d,a,b2,c,x[i+7]|0,10,1126891415);
+      c=ii(c,d,a,b2,x[i+14]|0,15,-1416354905);b2=ii(b2,c,d,a,x[i+5]|0,21,-57434055);
+      a=ii(a,b2,c,d,x[i+12]|0,6,1700485571);d=ii(d,a,b2,c,x[i+3]|0,10,-1894986606);
+      c=ii(c,d,a,b2,x[i+10]|0,15,-1051523);b2=ii(b2,c,d,a,x[i+1]|0,21,-2054922799);
+      a=ii(a,b2,c,d,x[i+8]|0,6,1873313359);d=ii(d,a,b2,c,x[i+15]|0,10,-30611744);
+      c=ii(c,d,a,b2,x[i+6]|0,15,-1560198380);b2=ii(b2,c,d,a,x[i+13]|0,21,1309151649);
+      a=ii(a,b2,c,d,x[i+4]|0,6,-145523070);d=ii(d,a,b2,c,x[i+11]|0,10,-1120210379);
+      c=ii(c,d,a,b2,x[i+2]|0,15,718787259);b2=ii(b2,c,d,a,x[i+9]|0,21,-343485551);
+      a=au(a,oa);b2=au(b2,ob);c=au(c,oc);d=au(d,od);
+    }
+    x=[a,b2,c,d];var s2="";
+    for(i=0;i<4;i++)for(var j=0;j<4;j++)s2+=("0"+((x[i]>>(j*8))&0xFF).toString(16)).slice(-2);
+    return s2;
+  }
+  // UTF-8 encode
+  var utf=unescape(encodeURIComponent(str)); return tb(utf);
+}
+
+/* ---------- helpers ---------- */
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const JSON_T = "application/json";
+const FORM_T = "application/x-www-form-urlencoded; charset=UTF-8";
+function H(extra){ return Object.assign({"Accept-Language":"en-US,en;q=0.9","DNT":"1"}, extra||{}); }
+function R(exists, detail, rateLimit, error){ return {exists:exists, detail:detail||null, rateLimit:!!rateLimit, error:error||null}; }
+function rand(n){ n=n||12; const c="abcdefghijklmnopqrstuvwxyz0123456789"; let s=""; for(let i=0;i<n;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
+
+function proxied(url, proxy){
+  if(!proxy) return url;
+  return proxy.indexOf("?")>=0 ? proxy + encodeURIComponent(url) : proxy + url;
+}
+async function doFetch(ctx, url, opts){
+  opts = opts || {};
+  const ctrl = new AbortController();
+  const timer = setTimeout(function(){ ctrl.abort(); }, ctx.timeout);
+  try{
+    return await fetch(proxied(url, ctx.proxy), Object.assign({redirect:"follow", signal:ctrl.signal}, opts));
+  } finally { clearTimeout(timer); }
+}
+async function bodyText(r){ try{ return await r.text(); }catch(e){ return ""; } }
+async function bodyJson(r){ try{ return await r.json(); }catch(e){ return null; } }
+function html(text){ return new DOMParser().parseFromString(text, "text/html"); }
+
+/* ---------- registry ---------- */
+const SITES = [];
+function def(name, domain, category, method, fn){ SITES.push({name,domain,category,method,fn}); }
+
+/* ===================== profiles / media ===================== */
+def("gravatar","gravatar.com","media","profile", async (email,ctx)=>{
+  const h = md5(email.trim().toLowerCase());
+  const r = await doFetch(ctx, "https://en.gravatar.com/"+h+".json", {headers:H({Accept:JSON_T})});
+  if(r.status!==200) return R(false);
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const e = (j.entry||[])[0]||{};
+  const detail = [e.displayName, e.profileUrl].filter(Boolean).join(" / ") || null;
+  return R(true, detail);
+});
+
+/* ===================== social ===================== */
+def("twitter","x.com","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.twitter.com/i/users/email_available.json?email="+encodeURIComponent(email), {headers:H({Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("taken" in j) return R(!!j.taken);
+  return R(null,null,true,"unexpected payload");
+});
+
+async function metaRegister(email,ctx,origin,signup,attempt){
+  const headers = H({Origin:origin, Accept:"application/json, text/plain, */*", "X-Requested-With":"XMLHttpRequest"});
+  const freq = await doFetch(ctx, origin+signup, {headers});
+  const txt = await bodyText(freq);
+  const m = txt.match(/"csrf_token":"([^"]+)"/);
+  if(!m) return R(null,null,true,"no csrf token");
+  headers["x-csrftoken"] = m[1];
+  const data = new URLSearchParams({email, username:rand(20), first_name:"", opt_into_one_tap:"false"});
+  const r = await doFetch(ctx, origin+attempt, {method:"POST", headers, body:data});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.status==="fail") return R(null,null,true,"attempt failed");
+  const errors = j.errors||{};
+  if(errors.email){ const s = JSON.stringify(errors.email); if(s.indexOf("email_is_taken")>=0||s.indexOf("email_sharing_limit")>=0) return R(true); }
+  if(JSON.stringify(errors).indexOf("email_sharing_limit")>=0) return R(true);
+  return R(false);
+}
+def("instagram","instagram.com","social","register",(e,c)=>metaRegister(e,c,"https://www.instagram.com","/accounts/emailsignup/","/api/v1/web/accounts/web_create_ajax/attempt/"));
+def("facebook","facebook.com","social","register",(e,c)=>metaRegister(e,c,"https://www.facebook.com","/accounts/emailsignup/","/api/v1/web/accounts/web_create_ajax/attempt/"));
+
+async function snap(email,ctx,field){
+  const req = await doFetch(ctx, "https://accounts.snapchat.com", {headers:H()});
+  const t = await bodyText(req);
+  const m1 = t.match(/data-xsrf="([^"]+)"/), m2 = t.match(/data-web-client-id="([^"]+)"/);
+  if(!m1||!m2) return R(null,null,true,"no token");
+  const headers = {"User-Agent":UA, Accept:"*/*", "X-XSRF-TOKEN":m1[1], "Content-Type":"application/json"};
+  const r = await doFetch(ctx, "https://accounts.snapchat.com/accounts/merlin/login",
+    {method:"POST", headers, body:JSON.stringify({email, app:"BITMOJI_APP"})});
+  if(r.status===204) return R(false);
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  return R(!!j[field]);
+}
+def("snapchat","snapchat.com","social","login",(e,c)=>snap(e,c,"hasSnapchat"));
+def("bitmoji","bitmoji.com","social","login",(e,c)=>snap(e,c,"hasBitmoji"));
+
+def("pinterest","pinterest.com","social","register", async (email,ctx)=>{
+  const data = '{"options": {"email": "'+email+'"}, "context": {}}';
+  const r = await doFetch(ctx, "https://www.pinterest.com/_ngjs/resource/EmailExistsResource/get/?source_url=%2F&data="+encodeURIComponent(data), {headers:H({Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j||!j.resource_response) return R(null,null,true,"non-json");
+  const d = j.resource_response.data;
+  if(String(d).indexOf("source_field")>=0) return R(null,null,true,"challenge");
+  return R(!!d);
+});
+
+def("discord","discord.com","social","register", async (email,ctx)=>{
+  const headers = H({Accept:"*/*", Origin:"https://discord.com", "Content-Type":JSON_T});
+  const body = JSON.stringify({fingerprint:"", email, username:rand(20), password:rand(20),
+    invite:null, consent:true, date_of_birth:"", gift_code_sku_id:null, captcha_key:null});
+  const r = await doFetch(ctx, "https://discord.com/api/v9/auth/register", {method:"POST", headers, body});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("captcha_key" in j) return R(null,null,true,"captcha required");
+  const errors = j.errors||{};
+  if(errors.email){ return R(String(JSON.stringify(errors.email)).indexOf("EMAIL_ALREADY_REGISTERED")>=0); }
+  return R(null,null,true,"inconclusive");
+});
+
+def("tumblr","tumblr.com","social","register", async (email,ctx)=>{
+  const gb = await doFetch(ctx, "https://www.tumblr.com/", {headers:H()});
+  const doc = html(await bodyText(gb));
+  let bearer=null;
+  doc.querySelectorAll("script").forEach(s=>{
+    if(!bearer && s.textContent.indexOf("___INITIAL_STATE___")>=0){
+      const parts = s.textContent.split('{"API_TOKEN":"');
+      if(parts.length>1){ bearer = parts[parts.length-1].split('","extraHeaders":"{}"}')[0]; }
+    }
+  });
+  if(!bearer) return R(null,null,true,"no bearer token");
+  const csrf = await doFetch(ctx, "https://www.tumblr.com/api/v2/radar?fields%5Bblogs%5D=name&limit=1", {headers:H({Referer:"https://www.tumblr.com/"})});
+  const ct = await bodyText(csrf);
+  const cm = ct.match(/"csrf":"([^"]+)"/);
+  const headers = H({Origin:"https://www.tumblr.com", Referer:"https://www.tumblr.com/register", Accept:JSON_T, "Content-Type":JSON_T});
+  headers["Authorization"] = "Bearer "+bearer;
+  if(cm) headers["X-CSRF"] = cm[1];
+  const post = await doFetch(ctx, "https://www.tumblr.com/api/v2/register/account/validate", {method:"POST", headers, body:JSON.stringify({email})});
+  if(post.status===400) return R(true);
+  if(post.status===200||post.status===201) return R(false);
+  return R(null,null,true,"HTTP "+post.status);
+});
+
+def("strava","strava.com","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.strava.com/register/free?cta=sign-up&element=button&source=website_show", {headers:H({Referer:"https://www.strava.com/register/free"})});
+  const m = (await bodyText(r)).match(/name="csrf-token" content="([^"]+)"/);
+  if(!m) return R(null,null,true,"no csrf token");
+  const rr = await doFetch(ctx, "https://www.strava.com/athletes/email_unique?email="+encodeURIComponent(email),
+    {headers:H({"X-CSRF-Token":m[1], "X-Requested-With":"XMLHttpRequest"})});
+  const t = (await bodyText(rr)).trim();
+  if(t==="false") return R(true);
+  if(t==="true") return R(false);
+  return R(null,null,true,"unexpected body");
+});
+
+def("wattpad","wattpad.com","social","register", async (email,ctx)=>{
+  await doFetch(ctx, "https://www.wattpad.com", {headers:H()});
+  const r = await doFetch(ctx, "https://www.wattpad.com/api/v3/users/validate?email="+encodeURIComponent(email), {headers:H({Referer:"https://www.wattpad.com/"})});
+  const t = await bodyText(r);
+  if(r.status===200||r.status===400){
+    if(t==='{"message":"OK","code":200}' || t.indexOf("Cette adresse")<0){
+      const low=t.toLowerCase();
+      if(low.indexOf("already")>=0||low.indexOf("existe")>=0||low.indexOf("taken")>=0) return R(true);
+      return R(false);
+    }
+    return R(true);
+  }
+  return R(null,null,true,"HTTP "+r.status);
+});
+
+def("xing","xing.com","social","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.xing.com/start/signup?registration=1", {headers:H()});
+  if(g.status!==200) return R(null,null,true,"HTTP "+g.status);
+  const r = await doFetch(ctx, "https://www.xing.com/welcome/api/signup/validate",
+    {method:"POST", headers:H({Origin:"https://www.xing.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const s = JSON.stringify(j).toLowerCase();
+  if(s.indexOf("email")>=0 && (s.indexOf("taken")>=0||s.indexOf("already")>=0)) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("patreon","patreon.com","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.patreon.com/api/email/available?include=",
+    {method:"POST", headers:H({Origin:"https://www.patreon.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.is_available===true) return R(false);
+  if(j.is_available===false) return R(true);
+  return R(null,null,true,"inconclusive");
+});
+
+def("venmo","venmo.com","social","register", async (email,ctx)=>{
+  await doFetch(ctx, "https://venmo.com/signup/email", {headers:H()});
+  const r = await doFetch(ctx, "https://venmo.com/api/v5/users",
+    {method:"POST", headers:H({Origin:"https://venmo.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("Not acceptable")>=0) return R(null,null,true,"blocked");
+  if(t.indexOf("That email is already registered in our system.")>=0) return R(true);
+  if([200,201,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("imgur","imgur.com","social","register", async (email,ctx)=>{
+  await doFetch(ctx, "https://imgur.com/register?redirect=%2Fuser", {headers:H()});
+  const r = await doFetch(ctx, "https://imgur.com/signin/ajax_email_available",
+    {method:"POST", headers:H({Origin:"https://imgur.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("Invalid email domain")>=0) return R(false);
+  let j=null; try{ j=JSON.parse(t); }catch(e){}
+  if(!j) return R(null,null,true,"non-json");
+  const d = j.data||{};
+  if(d.available===true) return R(false);
+  if(d.available===false) return R(true);
+  return R(null,null,true,"inconclusive");
+});
+
+def("myspace","myspace.com","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://myspace.com/signup/email", {headers:H()});
+  const m = (await bodyText(r)).match(/name="csrf"[^>]*value="([^"]+)"/);
+  if(!m) return R(null,null,true,"no csrf token");
+  const rr = await doFetch(ctx, "https://myspace.com/ajax/account/validateemail",
+    {method:"POST", headers:H({Origin:"https://myspace.com", Referer:"https://myspace.com/signup/email", "Content-Type":FORM_T, Hash:m[1]}),
+     body:new URLSearchParams({email})});
+  const t = await bodyText(rr);
+  if(t.indexOf("This email address was already used to create an account.")>=0) return R(true);
+  return R(false);
+});
+
+def("fanpop","fanpop.com","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.fanpop.com/login/superlogin",
+    {method:"POST", headers:H({Origin:"https://www.fanpop.com", Referer:"https://www.fanpop.com/register", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, password:rand(12), redirect_url:"https://www.fanpop.com/"})});
+  return R((await bodyText(r)).indexOf("already registered")>=0);
+});
+
+def("plurk","plurk.com","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.plurk.com/Users/isEmailFound",
+    {method:"POST", headers:H({Origin:"https://www.plurk.com", "Content-Type":FORM_T}), body:new URLSearchParams({email})});
+  const t = (await bodyText(r)).trim();
+  if(t==="True") return R(true);
+  if(t==="False") return R(false);
+  return R(null,null,true,"unexpected body");
+});
+
+def("tellonym","tellonym.me","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.tellonym.me/accounts/check?email="+encodeURIComponent(email),
+    {headers:H({Origin:"https://tellonym.me", Referer:"https://tellonym.me/register/email", Accept:JSON_T})});
+  const t = await bodyText(r);
+  if(t.indexOf("EMAIL_ALREADY_IN_USE")>=0) return R(true);
+  if([200,400,409].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("taringa","taringa.net","social","register", async (email,ctx)=>{
+  const headers = H({Origin:"https://www.taringa.net", Accept:"*/*", "Content-Type":JSON_T});
+  const r = await doFetch(ctx, "https://www.taringa.net/api/auth/availability/email", {method:"POST", headers, body:JSON.stringify({email})});
+  const t = await bodyText(r);
+  if(r.status===200 && t==='{"available":false}'){
+    const probe = rand(15)+"@"+email.split("@").pop();
+    const r2 = await doFetch(ctx, "https://www.taringa.net/api/auth/availability/email", {method:"POST", headers, body:JSON.stringify({email:probe})});
+    const t2 = await bodyText(r2);
+    if(r2.status===200 && t2==='{"available":false}') return R(null,null,true,"baseline also unavailable");
+    return R(true);
+  }
+  if([200,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("vsco","vsco.co","social","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.vsco.co/2.0/users/email?email="+encodeURIComponent(email), {headers:H({Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if((j.error===undefined||j.error===false||j.error===null) && j.user) return R(true);
+  if(JSON.stringify(j).toLowerCase().indexOf("not found")>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("odnoklassniki","ok.ru","social","password recovery", async (email,ctx)=>{
+  const headers = H({Referer:"https://ok.ru/"});
+  await doFetch(ctx, "https://www.ok.ru/dk?st.cmd=anonymMain&st.accRecovery=on&st.error=errors.password.wrong&st.email="+encodeURIComponent(email), {headers});
+  const r = await doFetch(ctx, "https://www.ok.ru/dk?st.cmd=anonymRecoveryAfterFailedLogin&st._aid=LeftColumn_Login_ForgotPassword", {headers});
+  const t = await bodyText(r);
+  if(t.indexOf("account_info")>=0||t.indexOf("anonymRecoveryStart")>=0){
+    const m = t.match(/class="[^"]*account_info[^"]*"[^>]*>([^<]+)</);
+    return R(true, m?m[1].trim():null);
+  }
+  if(t.toLowerCase().indexOf("not found")>=0||t.indexOf("st.error")>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== mail ===================== */
+def("google","google.com","mail","register", async (email,ctx)=>{
+  const headers = H({Accept:"*/*", Origin:"https://accounts.google.com", "Content-Type":"application/x-www-form-urlencoded;charset=utf-8",
+    Referer:"https://accounts.google.com/signup/v2/webcreateaccount", "X-Same-Domain":"1", "Google-Accounts-XSRF":"1"});
+  const g = await doFetch(ctx, "https://accounts.google.com/signup/v2/webcreateaccount?continue=https%3A%2F%2Faccounts.google.com%2FManageAccount%3Fnc%3D1&gmb=exp&biz=false&flowName=GlifWebSignIn&flowEntry=SignUp", {headers});
+  const t = await bodyText(g);
+  const parts = t.split("quot;,null,null,null,&quot;");
+  if(parts.length<2) return R(null,null,true,"no flow token");
+  const freq = parts[1].split("&quot")[0];
+  const data = new URLSearchParams({continue:"https://accounts.google.com/", dsh:"", hl:"en",
+    "f.req":'["'+freq+'","","","'+email+'",false]', azt:"", cookiesDisabled:"false", gmscoreversion:"unined", "":""});
+  const r = await doFetch(ctx, "https://accounts.google.com/_/signup/webusernameavailability?hl=en&rt=j", {method:"POST", headers, body:data});
+  const rt = await bodyText(r);
+  if(rt.indexOf('"gf.wuar",2')>=0) return R(true);
+  if(rt.indexOf('"gf.wuar",1')>=0||rt.indexOf("EmailInvalid")>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("yahoo","yahoo.com","mail","login", async (email,ctx)=>{
+  const headers = H({Origin:"https://login.yahoo.com", Accept:"*/*"});
+  const g = await doFetch(ctx, "https://login.yahoo.com", {headers});
+  const m = (await bodyText(g)).match(/<input[^>]*name="acrumb"[^>]*value="([^"]+)"/);
+  if(!m) return R(null,null,true,"no session token");
+  const data = new URLSearchParams({acrumb:m[1], sessionIndex:"", username:email, passwd:"", signin:"Next",
+    ".persistent":"y", ".src":"", ".lang":"en-US", ".done":"https://www.yahoo.com"});
+  const r = await doFetch(ctx, "https://login.yahoo.com/", {method:"POST", headers, body:data});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("error" in j) return R(true);
+  if("render" in j) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("mail_ru","mail.ru","mail","password recovery", async (email,ctx)=>{
+  const headers = H({Origin:"https://account.mail.ru", Accept:JSON_T, "Content-Type":JSON_T,
+    Referer:"https://account.mail.ru/recovery?email="+email});
+  const r = await doFetch(ctx, "https://account.mail.ru/api/v1/user/password/restore",
+    {method:"POST", headers, body:JSON.stringify({email, htmlencoded:false, token:""})});
+  if(r.status===200){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    const s = JSON.stringify(j).toLowerCase();
+    if(s.indexOf("not found")>=0||s.indexOf("не найден")>=0||j.status==="error") return R(false);
+    if(j.status==="ok"||s.indexOf("email")>=0) return R(true);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("protonmail","proton.me","mail","other", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.protonmail.ch/pks/lookup?op=index&search="+encodeURIComponent(email), {headers:H()});
+  const t = await bodyText(r);
+  if(t.indexOf("info:1:0")>=0) return R(false);
+  if(t.indexOf("info:1:1")>=0){
+    const m = t.match(/pub:([0-9a-fA-F]+):/);
+    return R(true, m?("key "+m[1].slice(0,16)+"..."):null);
+  }
+  return R(null,null,true,"unexpected body");
+});
+
+def("rambler","rambler.ru","mail","register", async (email,ctx)=>{
+  const headers = H({Origin:"https://id.rambler.ru", Referer:"https://id.rambler.ru/champ/registration", Accept:JSON_T, "Content-Type":JSON_T});
+  const r = await doFetch(ctx, "https://id.rambler.ru/jsonrpc",
+    {method:"POST", headers, body:JSON.stringify({method:"Rambler::Id::email_exist", params:{email}, id:1})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.result && typeof j.result==="object"){
+    if(j.result.exists===true) return R(true);
+    if(j.result.exists===false) return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("office365","office365.com","mail","other", async (email,ctx)=>{
+  const domain = email.split("@").pop();
+  let r = await doFetch(ctx, "https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/"+encodeURIComponent(email)+"?Protocol=Autodiscoverv1", {headers:H({Accept:JSON_T})});
+  if(r.status!==200){
+    r = await doFetch(ctx, "https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/"+encodeURIComponent(domain)+"?Protocol=Autodiscoverv1", {headers:H({Accept:JSON_T})});
+  }
+  if(r.status===200){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    const s = JSON.stringify(j);
+    if(s.indexOf("Protocol")>=0||s.indexOf("Url")>=0) return R(true);
+    return R(false);
+  }
+  return R(false);
+});
+
+/* ===================== developer ===================== */
+def("github","github.com","dev","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://github.com/join", {headers:H()});
+  const t = await bodyText(g);
+  const re = /<auto-check src="\/signup_check\/username[\s\S]*?value="([\S]+)"[\s\S]*<auto-check src="\/signup_check\/email[\s\S]*?value="([\S]+)"/;
+  const m = t.match(re);
+  if(!m) return R(null,null,true,"no authenticity token");
+  const r = await doFetch(ctx, "https://github.com/signup_check/email",
+    {method:"POST", headers:H(), body:new URLSearchParams({value:email, authenticity_token:m[2]})});
+  const rt = await bodyText(r);
+  if(rt.indexOf("Your browser did something unexpected.")>=0) return R(null,null,true,"challenge");
+  if(r.status===422) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"HTTP "+r.status);
+});
+
+def("docker","docker.com","dev","register", async (email,ctx)=>{
+  const headers = H({Origin:"https://hub.docker.com", Referer:"https://hub.docker.com/signup", Accept:JSON_T, "Content-Type":JSON_T});
+  const body = JSON.stringify({email, password:"", recaptcha_response:"", redirect_value:"", subscribe:true, username:""});
+  const r = await doFetch(ctx, "https://hub.docker.com/v2/users/signup/", {method:"POST", headers, body});
+  const t = await bodyText(r);
+  if(t.indexOf("This email is already in use.")>=0) return R(true);
+  if([200,201,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("replit","replit.com","dev","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://replit.com/data/user/exists",
+    {method:"POST", headers:H({Origin:"https://replit.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.exists===true) return R(true);
+  if(j.exists===false) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("codepen","codepen.io","dev","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://codepen.io/accounts/signup/user/free", {headers:H({Referer:"https://codepen.io/accounts/signup/user/free", Origin:"https://codepen.io"})});
+  const m = (await bodyText(g)).match(/name="csrf-token" content="([^"]+)"/);
+  const headers = H({Origin:"https://codepen.io", Referer:"https://codepen.io/accounts/signup/user/free", "Content-Type":FORM_T});
+  if(m) headers["X-CSRF-Token"]=m[1];
+  const r = await doFetch(ctx, "https://codepen.io/accounts/duplicate_check", {method:"POST", headers, body:new URLSearchParams({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("That Email is already taken.")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("codecademy","codecademy.com","dev","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.codecademy.com/register?redirect=%2F", {headers:H()});
+  const t = await bodyText(g);
+  const m = t.match(/name="csrf-token" content="([^"]+)"/) || t.match(/"csrfToken":"([^"]+)"/);
+  const headers = H({Origin:"https://www.codecademy.com", Referer:"https://www.codecademy.com/register?redirect=%2F", "Content-Type":FORM_T});
+  if(m) headers["X-CSRF-Token"]=m[1];
+  const r = await doFetch(ctx, "https://www.codecademy.com/register/validate", {method:"POST", headers, body:new URLSearchParams({"user[email]":email})});
+  const rt = await bodyText(r);
+  if(rt.indexOf("is already taken")>=0) return R(true);
+  if([200,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("devrant","devrant.com","dev","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://devrant.com/api/users",
+    {method:"POST", headers:H({Origin:"https://devrant.com", Referer:"https://devrant.com/feed/top/month?login=1", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, username:rand(12), password:rand(12), type:"1", app:"3"})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const s = JSON.stringify(j).toLowerCase();
+  if(s.indexOf("email")>=0 && (s.indexOf("taken")>=0||s.indexOf("exist")>=0)) return R(true);
+  if(j.success===true) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("teamtreehouse","teamtreehouse.com","dev","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://teamtreehouse.com/subscribe/new?trial=yes", {headers:H({Referer:"https://teamtreehouse.com/subscribe/new?trial=yes", Origin:"https://teamtreehouse.com"})});
+  const m = (await bodyText(g)).match(/name="authenticity_token" value="([^"]+)"/);
+  const headers = H({Origin:"https://teamtreehouse.com", Referer:"https://teamtreehouse.com/subscribe/new?trial=yes", "Content-Type":FORM_T});
+  if(m) headers["X-CSRF-Token"]=m[1];
+  const r = await doFetch(ctx, "https://teamtreehouse.com/account/email_address", {method:"POST", headers, body:new URLSearchParams({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("that email address is taken.")>=0) return R(true);
+  if(t==='{"success":true}') return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("lastpass","lastpass.com","dev","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://lastpass.com/create_account.php?check=1&email="+encodeURIComponent(email), {headers:H({Referer:"https://lastpass.com/"})});
+  const t = (await bodyText(r)).trim();
+  if(t==="no") return R(true);
+  if(t==="ok"||t==="emailinvalid") return R(false);
+  return R(null,null,true,"unexpected body");
+});
+
+def("firefox","firefox.com","dev","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.accounts.firefox.com/v1/account/status",
+    {method:"POST", headers:H({Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const t = await bodyText(r);
+  if(t.indexOf('"exists":false')>=0||t.trim()==="false") return R(false);
+  if(t.indexOf('"exists":true')>=0||t.trim()==="true") return R(true);
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== shopping ===================== */
+def("amazon","amazon.com","shopping","login", async (email,ctx)=>{
+  const headers = H();
+  const url = "https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2F%3F_encoding%3DUTF8%26ref_%3Dnav_ya_signin&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=usflex&openid.mode=checkid_setup&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&";
+  const g = await doFetch(ctx, url, {headers});
+  const doc = html(await bodyText(g));
+  const params = new URLSearchParams();
+  doc.querySelectorAll("form input").forEach(inp=>{ if(inp.name && inp.value!==undefined) params.set(inp.name, inp.value); });
+  if([...params].length===0) return R(null,null,true,"no form");
+  params.set("email", email);
+  const r = await doFetch(ctx, "https://www.amazon.com/ap/signin/", {method:"POST", headers, body:params});
+  const doc2 = html(await bodyText(r));
+  if(doc2.getElementById("auth-password-missing-alert")) return R(true);
+  if(doc2.getElementById("auth-error-message-box")) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("ebay","ebay.com","shopping","login", async (email,ctx)=>{
+  const headers = H({Origin:"https://www.ebay.com", Accept:JSON_T});
+  const g = await doFetch(ctx, "https://www.ebay.com/signin/", {headers});
+  const t = await bodyText(g);
+  const parts = t.split('"csrfAjaxToken":"');
+  if(parts.length<2) return R(null,null,true,"no csrf token");
+  const srt = parts[1].split('"')[0];
+  const r = await doFetch(ctx, "https://signin.ebay.com/signin/srv/identifer", {method:"POST", headers, body:new URLSearchParams({identifier:email, srt})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("err" in j) return R(false);
+  return R(true);
+});
+
+def("envato","envato.com","shopping","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://account.envato.com/api/validate_email",
+    {method:"POST", headers:H({Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("Email is already in use")>=0) return R(true);
+  if(t.indexOf("Page designed by Kotulsky")>=0||r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("deliveroo","deliveroo.com","shopping","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://consumer-ow-api.deliveroo.com/orderapp/v1/check-email",
+    {method:"POST", headers:H({Origin:"https://deliveroo.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  if(r.status===200){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    if(j.exists===true||j.available===false) return R(true);
+    if(j.exists===false||j.available===true) return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("dominosfr","dominos.fr","shopping","register", async (email,ctx)=>{
+  const headers = H({Referer:"https://commande.dominos.fr/eStore/fr/Signup"});
+  await doFetch(ctx, "https://commande.dominos.fr/eStore/fr/Signup", {headers});
+  const r = await doFetch(ctx, "https://commande.dominos.fr/eStore/fr/Signup/IsEmailAvailable?email="+encodeURIComponent(email), {headers});
+  if(r.status===200){
+    const t = (await bodyText(r)).trim();
+    if(t==="false") return R(true);
+    if(t==="true") return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("nike","nike.com","shopping","register", async (email,ctx)=>{
+  const q = "?appVersion=831&experienceVersion=831&uxid=com.nike.commerce.nikedotcom.web&locale=en_US&backendEnvironment=identity&browser=&mobile=false&native=false&visit=1";
+  const r = await doFetch(ctx, "https://unite.nike.com/account/email/v1"+q,
+    {method:"POST", headers:H({Origin:"https://www.nike.com", Referer:"https://www.nike.com/", "Content-Type":"text/plain;charset=UTF-8"}), body:JSON.stringify({emailAddress:email})});
+  if(r.status===409) return R(true);
+  if(r.status===204) return R(false);
+  return R(null,null,true,"HTTP "+r.status);
+});
+
+def("samsung","samsung.com","shopping","password recovery", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://account.samsung.com/accounts/v1/Samsung_com_FR/signUp", {headers:H()});
+  const t = await bodyText(g);
+  const m = t.match(/'token' : '([^']+)'/) || t.match(/"{'token' : '([^']+)'/);
+  if(!m) return R(null,null,true,"no token");
+  const r = await doFetch(ctx, "https://account.samsung.com/accounts/v1/Samsung_com_FR/signUpCheckEmailIDProc",
+    {method:"POST", headers:H({Origin:"https://account.samsung.com", Referer:"https://account.samsung.com/accounts/v1/Samsung_com_FR/signUp", "Content-Type":FORM_T}),
+     body:new URLSearchParams({emailID:email, token:m[1]})});
+  if(r.status===200){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    const rt = JSON.stringify(j);
+    if("rtnCd" in j && rt.indexOf("INAPPROPRIATE_CHARACTERS")<0) return R(true);
+    return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("garmin","garmin.com","shopping","register", async (email,ctx)=>{
+  const q = "?service=https%3A%2F%2Fwww.garmin.com%2Fen-US%2Faccount%2Fprofile%2F&webhost=https%3A%2F%2Fwww.garmin.com%2Fen-US%2Faccount%2Fcreate%2F&source=https%3A%2F%2Fwww.garmin.com%2Fen-US%2Faccount%2Fcreate%2F&gauthHost=https%3A%2F%2Fsso.garmin.com%2Fsso";
+  const g = await doFetch(ctx, "https://sso.garmin.com/sso/createNewAccount"+q, {headers:H()});
+  const m = (await bodyText(g)).match(/"token": "([^"]+)"/);
+  if(!m) return R(null,null,true,"no token");
+  const r = await doFetch(ctx, "https://sso.garmin.com/sso/validateNewAccount"+q,
+    {method:"POST", headers:H({Origin:"https://sso.garmin.com", "Content-Type":FORM_T}), body:new URLSearchParams({email, token:m[1]})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const s = JSON.stringify(j).toLowerCase();
+  if(j.emailAvailable===false||s.indexOf("already")>=0) return R(true);
+  if(j.emailAvailable===true) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("vivino","vivino.com","shopping","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.vivino.com/api/login",
+    {method:"POST", headers:H({Referer:"https://www.vivino.com/", "Content-Type":FORM_T}), body:new URLSearchParams({email, password:rand(12)})});
+  if(r.status===429) return R(null,null,true,"HTTP 429");
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const s = JSON.stringify(j).toLowerCase();
+  if(s.indexOf("password")>=0 && s.indexOf("incorrect")>=0) return R(true);
+  if(s.indexOf("not found")>=0||s.indexOf("invalid")>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("bodybuilding","bodybuilding.com","shopping","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.bodybuilding.com/profile/email/"+encodeURIComponent(email),
+    {method:"HEAD", headers:H({Origin:"https://www.bodybuilding.com", Referer:"https://www.bodybuilding.com/"})});
+  if(r.status===200) return R(true);
+  if(r.status===404) return R(false);
+  return R(null,null,true,"HTTP "+r.status);
+});
+
+def("eventbrite","eventbrite.com","shopping","login", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.eventbrite.com/signin/?referrer=%2F", {headers:H()});
+  let csrf = null;
+  try{ csrf = document.cookie.match(/csrftoken=([^;]+)/); }catch(e){}
+  // browsers can't read cross-site cookies; try the Set-Cookie via a same-origin-ish read fallback
+  if(!csrf) return R(null,null,true,"no csrf cookie (browser cookie limits)");
+  const headers = H({Origin:"https://www.eventbrite.com", Referer:"https://www.eventbrite.com/", Accept:"*/*", "Content-Type":JSON_T, "X-CSRFToken":csrf[1], "X-Requested-With":"XMLHttpRequest"});
+  const r = await doFetch(ctx, "https://www.eventbrite.com/api/v3/users/lookup/", {method:"POST", headers, body:JSON.stringify({email})});
+  if(r.status===200){ const j=await bodyJson(r); return j?R(!!j.exists):R(null,null,true,"non-json"); }
+  return R(null,null,true,"HTTP "+r.status);
+});
+
+def("naturabuy","naturabuy.fr","shopping","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.naturabuy.fr/includes/ajax/register.php",
+    {method:"POST", headers:H({Origin:"https://www.naturabuy.fr", "Content-Type":FORM_T}), body:new URLSearchParams({email, pseudo:rand(10)})});
+  let j=null; try{ j=JSON.parse(await bodyText(r)); }catch(e){}
+  if(!j) return R(null,null,true,"non-json");
+  if(j.free===false) return R(true);
+  if(j.free===true) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("armurerieauxerre","armurerie-auxerre.com","shopping","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.armurerie-auxerre.com/customer/Email/email/",
+    {method:"POST", headers:H({Origin:"https://www.armurerie-auxerre.com", "Content-Type":FORM_T}), body:new URLSearchParams({email})});
+  const t = (await bodyText(r)).trim();
+  if(t==="exist") return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== media / music / learning ===================== */
+def("spotify","spotify.com","music","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://spclient.wg.spotify.com/signup/public/v1/account?validate=1&email="+encodeURIComponent(email), {headers:H({Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.status===1) return R(false);
+  if(j.status===20) return R(true);
+  return R(null,null,true,"inconclusive");
+});
+
+def("soundcloud","soundcloud.com","music","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://soundcloud.com/octobersveryown", {headers:H({Accept:"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})});
+  const doc = html(await bodyText(g));
+  let cid=null;
+  doc.querySelectorAll("script").forEach(s=>{
+    if(cid) return;
+    try{ const j=JSON.parse(s.textContent); if(j&&j.runtimeConfig&&j.runtimeConfig.clientId) cid=j.runtimeConfig.clientId; }catch(e){}
+  });
+  if(!cid) return R(null,null,true,"no clientId");
+  const link = email.replace("@","%40");
+  const r = await doFetch(ctx, "https://api-auth.soundcloud.com/web-auth/identifier?q="+link+"&client_id="+cid, {headers:H({Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.status==="in_use") return R(true);
+  if(j.status==="available") return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("lastfm","last.fm","music","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.last.fm/join", {headers:H()});
+  const ck = (g.headers.get("set-cookie")||"").match(/csrftoken=([^;]+)/);
+  if(!ck) return R(null,null,true,"no csrf cookie (browser cookie limits)");
+  const headers = H({Referer:"https://www.last.fm/join", Accept:"*/*", "X-Requested-With":"XMLHttpRequest"});
+  const r = await doFetch(ctx, "https://www.last.fm/join/partial/validate",
+    {method:"POST", headers, body:new URLSearchParams({csrfmiddlewaretoken:ck[1], userName:"", email})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const msgs = (j.email&&j.email.error_messages)||[];
+  if(msgs.some(m=>m.indexOf("already registered")>=0)) return R(true);
+  if("email" in j) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("smule","smule.com","music","register", async (email,ctx)=>{
+  await doFetch(ctx, "https://www.smule.com/user/check_email", {headers:H({Origin:"https://www.smule.com"})});
+  const r = await doFetch(ctx, "https://www.smule.com/user/check_email",
+    {method:"POST", headers:H({Origin:"https://www.smule.com", "Content-Type":FORM_T}), body:new URLSearchParams({email})});
+  const t = await bodyText(r);
+  if(t.replace(/\s/g,"").indexOf('"exists":true')>=0 || t.toLowerCase().indexOf("already")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("tunefind","tunefind.com","music","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.tunefind.com/user/join", {headers:H()});
+  const m = (await bodyText(g)).match(/"csrf-token" content="([^"]+)"/);
+  const headers = H({Origin:"https://www.tunefind.com", Referer:"https://www.tunefind.com/", "Content-Type":FORM_T});
+  if(m) headers["X-CSRF-Token"]=m[1];
+  const r = await doFetch(ctx, "https://www.tunefind.com/user/join",
+    {method:"POST", headers, body:new URLSearchParams({"user[email]":email, "user[username]":rand(10), "user[password]":rand(12)})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.errors && "email" in j.errors) return R(true);
+  return R(false);
+});
+
+def("blip","blip.fm","music","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://blip.fm/signup/save",
+    {method:"POST", headers:H({Origin:"https://blip.fm", Referer:"https://blip.fm/", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, username:rand(10), password:rand(12)})});
+  const t = await bodyText(r);
+  if(t.indexOf("That email address is already in use.")>=0) return R(true);
+  if(t.indexOf("loading")>=0||r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("flickr","flickr.com","media","login", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://identity-api.flickr.com/migration?email="+encodeURIComponent(email),
+    {headers:H({Referer:"https://identity.flickr.com/login", Origin:"https://identity.flickr.com", Accept:JSON_T})});
+  let j=null; try{ j=JSON.parse(await bodyText(r)); }catch(e){}
+  if(!j) return R(null,null,true,"non-json");
+  if(j.is_migrated===true||j.user) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("komoot","komoot.com","media","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://account.komoot.com/v1/signin",
+    {method:"POST", headers:H({Origin:"https://account.komoot.com", Referer:"https://account.komoot.com/signin", Accept:JSON_T, "Content-Type":JSON_T}),
+     body:JSON.stringify({email, reason:"SignIn"})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(String(j.type||"").indexOf("login")>=0) return R(true);
+  if([200,400,401].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("sporcle","sporcle.com","media","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.sporcle.com/auth/ajax/verify.php",
+    {method:"POST", headers:H({Origin:"https://www.sporcle.com", "Content-Type":FORM_T}), body:new URLSearchParams({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("account already exists with this email")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("ello","ello.co","media","register", async (email,ctx)=>{
+  const headers = H({Origin:"https://ello.co", Referer:"https://ello.co/join", "Content-Type":FORM_T});
+  const r = await doFetch(ctx, "https://ello.co/api/v2/availability", {method:"POST", headers, body:new URLSearchParams({email})});
+  const t = await bodyText(r);
+  if(r.status===200 && t.toLowerCase().indexOf("taken")<0) return R(false);
+  const r2 = await doFetch(ctx, "https://ello.co/api/v2/availability", {method:"POST", headers, body:new URLSearchParams({email:rand(12)+"@"+email.split("@").pop()})});
+  const t2 = await bodyText(r2);
+  if(r.status===200 && r2.status===200 && t.toLowerCase().indexOf("taken")>=0 && t2.toLowerCase().indexOf("taken")<0) return R(true);
+  return R(null,null,true,"inconclusive");
+});
+
+def("duolingo","duolingo.com","learning","other", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.duolingo.com/2017-06-30/users?email="+encodeURIComponent(email), {headers:H({Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.users && j.users.length) return R(true);
+  if("users" in j) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("quora","quora.com","learning","register", async (email,ctx)=>{
+  const headers = H({Accept:"application/json, text/javascript, */*; q=0.01", Origin:"https://www.quora.com", "Content-Type":FORM_T, "X-Requested-With":"XMLHttpRequest"});
+  const g = await doFetch(ctx, "https://www.quora.com", {headers});
+  const m = (await bodyText(g)).match(/formkey": "([^"]+)"/);
+  if(!m) return R(null,null,true,"no formkey");
+  const r = await doFetch(ctx, "https://www.quora.com/webnode2/server_call_POST",
+    {method:"POST", headers, body:new URLSearchParams({json:'{"args":[],"kwargs":{"value":"'+email+'"}}', formkey:m[1], __hmac:"0XXXXXXxxXDxX", __method:"validate"})});
+  const t = (await bodyText(r)).toLowerCase();
+  if(t.indexOf("already")>=0||t.indexOf("existe")>=0||t.indexOf("compte")>=0) return R(true);
+  if([200,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== productivity / software / crm ===================== */
+def("adobe","adobe.com","software","password recovery", async (email,ctx)=>{
+  const headers = H({Accept:JSON_T, Origin:"https://auth.services.adobe.com", "Content-Type":"application/json;charset=utf-8", "X-IMS-CLIENTID":"adobedotcom2"});
+  const r = await doFetch(ctx, "https://auth.services.adobe.com/signin/v1/authenticationstate",
+    {method:"POST", headers, body:JSON.stringify({username:email, accountType:"individual"})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("errorCode" in j) return R(false);
+  const state = r.headers.get("x-ims-authentication-state-encrypted");
+  if(!state) return R(null,null,true,"no auth state");
+  headers["X-IMS-Authentication-State-Encrypted"]=state;
+  const r2 = await doFetch(ctx, "https://auth.services.adobe.com/signin/v2/challenges?purpose=passwordRecovery", {headers});
+  const d = await bodyJson(r2);
+  if(!d) return R(null,null,true,"non-json");
+  if("errorCode" in d) return R(true);
+  return R(true, "recovery="+(d.secondaryEmail||"?")+" phone="+(d.securityPhoneNumber||"?"));
+});
+
+def("archive","archive.org","software","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://archive.org/account/signup",
+    {method:"POST", headers:H({Origin:"https://archive.org", Referer:"https://archive.org/account/signup", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, screenname:rand(10), password:rand(12)})});
+  const t = await bodyText(r);
+  if(t.indexOf("is already taken.")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("issuu","issuu.com","software","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://issuu.com/call/signup/check-email/"+encodeURIComponent(email), {headers:H({Referer:"https://issuu.com/signup", Accept:JSON_T})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.available===false) return R(true);
+  if(j.available===true) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("anydo","any.do","productivity","login", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://sm-prod2.any.do/check_email",
+    {method:"POST", headers:H({Origin:"https://desktop.any.do", Referer:"https://desktop.any.do/", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  if(r.status===200){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    if(j.exists===true||JSON.stringify(j).toLowerCase().indexOf("already")>=0) return R(true);
+    if(j.exists===false) return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("evernote","evernote.com","productivity","login", async (email,ctx)=>{
+  const headers = H({Origin:"https://www.evernote.com", Referer:"https://www.evernote.com/Login.action", "Content-Type":FORM_T});
+  const g = await doFetch(ctx, "https://www.evernote.com/Login.action", {headers});
+  const t = await bodyText(g);
+  const m1 = t.match(/document\.getElementById\("hpts"\)\.value = "([^"]+)"/);
+  const m2 = t.match(/document\.getElementById\("hptsh"\)\.value = "([^"]+)"/);
+  if(!m1||!m2) return R(null,null,true,"no hidden tokens");
+  const r = await doFetch(ctx, "https://www.evernote.com/Login.action",
+    {method:"POST", headers, body:new URLSearchParams({username:email, hpts:m1[1], hptsh:m2[1], password:rand(12)})});
+  const rt = await bodyText(r);
+  if(rt.indexOf("usePasswordAuth")>=0) return R(true);
+  if(rt.indexOf("displayMessage")>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("atlassian","atlassian.com","software","register", async (email,ctx)=>{
+  const headers = H({Referer:"https://id.atlassian.com/", Origin:"https://id.atlassian.com", "Content-Type":FORM_T});
+  const g = await doFetch(ctx, "https://id.atlassian.com/login", {headers});
+  const t = await bodyText(g);
+  const m = t.match(/csrfToken&quot;:&quot;([^&]+)&quot;/) || t.match(/"csrfToken":"([^"]+)"/);
+  if(!m) return R(null,null,true,"no csrf token");
+  const r = await doFetch(ctx, "https://id.atlassian.com/rest/check-username", {method:"POST", headers, body:new URLSearchParams({email, csrfToken:m[1]})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(j.action==="login") return R(true);
+  if(j.action==="signup") return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("wordpress","wordpress.com","software","login", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://public-api.wordpress.com/rest/v1.1/users/"+encodeURIComponent(email)+"/auth-options?http_envelope=1", {headers:H({Accept:JSON_T})});
+  let info=null; try{ info=JSON.parse(await bodyText(r)); }catch(e){}
+  if(!info) return R(null,null,true,"non-json");
+  if(info.body) info=info.body;
+  if(info && "password" in info) return R(true);
+  if(r.status===404) return R(false);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("hubspot","hubspot.com","crm","login", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://api.hubspot.com/login-api/v1/login",
+    {method:"POST", headers:H({Origin:"https://app.hubspot.com", Referer:"https://app.hubspot.com/", Accept:JSON_T, "Content-Type":JSON_T}),
+     body:JSON.stringify({email, password:rand(12)})});
+  if(r.status===400){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    if(j.status==="INVALID_PASSWORD") return R(true);
+    if(j.status==="INVALID_USER") return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("zoho","zoho.com","crm","register", async (email,ctx)=>{
+  const headers = H({Origin:"https://accounts.zoho.com", Accept:"*/*", "Content-Type":FORM_T});
+  await doFetch(ctx, "https://accounts.zoho.com/register", {headers});
+  const r = await doFetch(ctx, "https://accounts.zoho.com/signin/v2/lookup/"+encodeURIComponent(email),
+    {method:"POST", headers, body:new URLSearchParams({mode:"primary", servicename:"ZohoCRM", serviceurl:"https://crm.zoho.com/crm/ShowHomePage.do", service_language:"en"})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(r.status===200 && j.message==="User exists") return R(true);
+  if(r.status===200 && "status_code" in j) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("pipedrive","pipedrive.com","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://app.pipedrive.com/signup-service/start",
+    {method:"POST", headers:H({Origin:"https://www.pipedrive.com", Referer:"https://www.pipedrive.com/", Accept:JSON_T, "Content-Type":JSON_T}),
+     body:JSON.stringify({email, language:"en"})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  const errors=j.errors||{};
+  if(errors.user_email && String(errors.user_email).indexOf("Email is not available")>=0) return R(true);
+  if("data" in j) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("teamleader","teamleader.eu","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://focus.teamleader.eu/app/emails/availability",
+    {method:"POST", headers:H({Origin:"https://signup.focus.teamleader.eu", Referer:"https://signup.focus.teamleader.eu/", Accept:JSON_T, "Content-Type":JSON_T}),
+     body:JSON.stringify({email})});
+  const t = await bodyText(r);
+  if(t==='{"available":false}') return R(true);
+  if(t==='{"available":true}') return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("insightly","insightly.com","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://accounts.insightly.com/signup/isemailvalid",
+    {method:"POST", headers:H({Origin:"https://accounts.insightly.com", Referer:"https://accounts.insightly.com/?plan=trial", "Content-Type":FORM_T}), body:new URLSearchParams({email})});
+  const t = await bodyText(r);
+  if(t.indexOf("An account exists for this address")>=0) return R(true);
+  if(t.trim()==="true") return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("nimble","nimble.com","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.nimble.com/lib/register.php?email="+encodeURIComponent(email), {headers:H({Referer:"https://www.nimble.com/"})});
+  const t = (await bodyText(r)).trim();
+  if(t.indexOf("already registered")>=0) return R(true);
+  if(t.replace(/"/g,"")==="true") return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("nocrm","nocrm.io","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://register.nocrm.io/register/check_trial_duplicate?email="+encodeURIComponent(email), {headers:H({Referer:"https://register.nocrm.io/"})});
+  const t = await bodyText(r);
+  if(t.indexOf('{"account":1')>=0) return R(true);
+  if(t.trim()==='{"account":0}') return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("nutshell","nutshell.com","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://app.nutshell.com/auth",
+    {method:"POST", headers:H({Origin:"https://app.nutshell.com", Referer:"https://app.nutshell.com/auth", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, password:rand(12)})});
+  const t = await bodyText(r);
+  if(t.indexOf("Sorry, your password is incorrect")>=0) return R(true);
+  if(t.indexOf("find a Nutshell account for that email address")>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("amocrm","amocrm.com","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.amocrm.com/account/check_login.php",
+    {method:"POST", headers:H({Origin:"https://www.amocrm.com", Referer:"https://www.amocrm.com/", "Content-Type":FORM_T}), body:new URLSearchParams({login:email})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if(r.status===200 && j.status==="used") return R(true);
+  if(r.status===200 && j.status==="free") return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("axonaut","axonaut.com","crm","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://axonaut.com/onboarding/?email="+encodeURIComponent(email), {headers:H({Referer:"https://axonaut.com/en"})});
+  if(r.status===302 && String(r.headers.get("location")||"").indexOf("/login?email")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== jobs / travel / medical / osint ===================== */
+def("freelancer","freelancer.com","jobs","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.freelancer.com/api/users/0.1/users/check?compact=true&new_errors=true",
+    {method:"POST", headers:H({Origin:"https://www.freelancer.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({user:{email}})});
+  const t = await bodyText(r);
+  if(r.status===409 && t.indexOf("EMAIL_ALREADY_IN_USE")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("coroflot","coroflot.com","jobs","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.coroflot.com/home/signup_email_check",
+    {method:"POST", headers:H({Origin:"https://www.coroflot.com", Referer:"https://www.coroflot.com/signup", "Content-Type":FORM_T}), body:new URLSearchParams({email})});
+  const t = (await bodyText(r)).toLowerCase();
+  if(t.indexOf("already")>=0||t.indexOf("taken")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("seoclerks","seoclerks.com","jobs","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.seoclerks.com", {headers:H({Origin:"https://www.seoclerks.com"})});
+  const t = await bodyText(g);
+  let token="";
+  const m = t.match(/token" value="([^"]+)"/); if(m) token=m[1];
+  const r = await doFetch(ctx, "https://www.seoclerks.com/signup/check",
+    {method:"POST", headers:H({Origin:"https://www.seoclerks.com", "Content-Type":FORM_T}), body:new URLSearchParams({email, token})});
+  const rt = await bodyText(r);
+  if(rt.indexOf("The email address you entered is already taken.")>=0) return R(true);
+  if([200,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("rocketreach","rocketreach.co","osint","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://rocketreach.co/signup", {headers:H()});
+  const m = (await bodyText(g)).match(/name="csrfmiddlewaretoken" value="(.*)"/);
+  const headers = H({Referer:"https://rocketreach.co/signup", Accept:JSON_T, "X-Requested-With":"XMLHttpRequest"});
+  if(m) headers["X-CSRFToken"]=m[1];
+  const r = await doFetch(ctx, "https://rocketreach.co/v1/validateEmail?email_address="+encodeURIComponent(email), {headers});
+  if(r.status===200||r.status===201){
+    const j = await bodyJson(r);
+    if(!j) return R(null,null,true,"non-json");
+    if(j.valid===false) return R(false);
+    if(j.valid===true) return R(true);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("blablacar","blablacar.com","travel","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://www.blablacar.fr/register", {headers:H({Referer:"https://www.blablacar.fr/", Origin:"https://www.blablacar.fr"})});
+  const m = (await bodyText(g)).match(/"appToken":"([^"]+)"/);
+  if(!m) return R(null,null,true,"no app token");
+  const r = await doFetch(ctx, "https://edge.blablacar.fr/auth/validation/email/"+encodeURIComponent(email), {headers:H({Accept:JSON_T, Authorization:"Bearer "+m[1]})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("exists" in j) return R(!!j.exists);
+  return R(null,null,true,"inconclusive");
+});
+
+def("vrbo","vrbo.com","travel","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.vrbo.com/auth/aam/v3/status",
+    {method:"POST", headers:H({Origin:"https://www.vrbo.com", Accept:JSON_T, "Content-Type":JSON_T}), body:JSON.stringify({email})});
+  const j = await bodyJson(r);
+  if(!j) return R(null,null,true,"non-json");
+  if("authType" in j) return R(true);
+  if([200,400].indexOf(r.status)>=0) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("caringbridge","caringbridge.org","medical","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.caringbridge.org/signin",
+    {method:"POST", headers:H({Origin:"https://www.caringbridge.org", Referer:"https://www.caringbridge.org/signin", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, password:rand(12)})});
+  const t = await bodyText(r);
+  if(t.indexOf("Welcome Back,")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("sevencups","7cups.com","medical","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.7cups.com/listener/CreateAccount.php",
+    {method:"POST", headers:H({Origin:"https://www.7cups.com", Referer:"https://www.7cups.com/listener/CreateAccount.php", "Content-Type":FORM_T}),
+     body:new URLSearchParams({email, username:rand(10), password:rand(12)})});
+  const t = await bodyText(r);
+  if(r.status===200){ if(t.indexOf("Account already exists with this email address")>=0) return R(true); return R(false); }
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== adult ===================== */
+def("pornhub","pornhub.com","adult","register", async (email,ctx)=>{
+  await doFetch(ctx, "https://www.pornhub.com/signup", {headers:H()});
+  const r = await doFetch(ctx, "https://www.pornhub.com/user/create_account_check",
+    {method:"POST", headers:H({Origin:"https://www.pornhub.com", "Content-Type":FORM_T}), body:new URLSearchParams({email, username:rand(10), password:rand(12)})});
+  const t = (await bodyText(r)).toLowerCase();
+  if(t.indexOf("already")>=0||t.indexOf("taken")>=0||t.indexOf("in use")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("redtube","redtube.com","adult","register", async (email,ctx)=>{
+  const g = await doFetch(ctx, "https://redtube.com/register", {headers:H({Origin:"https://redtube.com"})});
+  const doc = html(await bodyText(g));
+  const tag = doc.querySelector('input[name="token"]');
+  const token = tag ? (tag.value||"") : "";
+  const r = await doFetch(ctx, "https://www.redtube.com/user/create_account_check?token="+encodeURIComponent(token),
+    {method:"POST", headers:H({Origin:"https://redtube.com", "Content-Type":FORM_T}), body:new URLSearchParams({email, username:rand(10), password:rand(12)})});
+  const t = await bodyText(r);
+  if(t.indexOf("Email has been taken.")>=0) return R(true);
+  if(r.status===200) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+def("xnxx","xnxx.com","adult","register", async (email,ctx)=>{
+  const headers = H({Referer:"https://www.google.com/"});
+  const g = await doFetch(ctx, "https://www.xnxx.com", {headers});
+  if(g.status!==200) return R(null,null,true,"site unreachable");
+  const r = await doFetch(ctx, "https://www.xnxx.com/account/checkemail?email="+encodeURIComponent(email), {headers});
+  if(r.status===200){
+    let j=null; try{ j=JSON.parse(await bodyText(r)); }catch(e){}
+    if(!j) return R(null,null,true,"non-json");
+    if(j.result===false) return R(true);
+    if(j.result===true) return R(false);
+  }
+  return R(null,null,true,"inconclusive");
+});
+
+def("xvideos","xvideos.com","adult","register", async (email,ctx)=>{
+  const r = await doFetch(ctx, "https://www.xvideos.com/account/checkemail?email="+encodeURIComponent(email),
+    {headers:H({Referer:"https://www.xvideos.com/", Accept:JSON_T})});
+  const t = await bodyText(r);
+  if(t.indexOf("This email is already in use")>=0) return R(true);
+  let j=null; try{ j=JSON.parse(t); }catch(e){}
+  if(!j) return R(null,null,true,"non-json");
+  if(j.result===true) return R(false);
+  return R(null,null,true,"inconclusive");
+});
+
+/* ===================== MyBB forums ===================== */
+const MYBB = [
+  ["mybb","community.mybb.com","https://community.mybb.com"],
+  ["koditv","forum.kodi.tv","https://forum.kodi.tv"],
+  ["codeigniter","forum.codeigniter.com","https://forum.codeigniter.com"],
+  ["clashfarmer","clashfarmer.com","https://www.clashfarmer.com/forum"],
+  ["thevapingforum","thevapingforum.com","http://www.thevapingforum.com"],
+  ["biotechnologyforums","biotechnologyforums.com","https://biotechnologyforums.com"],
+  ["chinaphonearena","chinaphonearena.com","https://www.chinaphonearena.com/forum"],
+  ["cpaelites","cpaelites.com","https://www.cpaelites.com"],
+  ["cpahero","cpahero.com","https://www.cpahero.com"],
+  ["cracked_to","cracked.to","https://cracked.to"],
+  ["demonforums","demonforums.net","https://demonforums.net"],
+  ["freiberg","drachenhort.user.stunet.tu-freiberg.de","https://drachenhort.user.stunet.tu-freiberg.de"],
+  ["nattyornot","nattyornotforum.nattyornot.com","https://nattyornotforum.nattyornot.com"],
+  ["ndemiccreations","forum.ndemiccreations.com","https://forum.ndemiccreations.com"],
+  ["nextpvr","forums.nextpvr.com","https://forums.nextpvr.com"],
+  ["onlinesequencer","onlinesequencer.net","https://onlinesequencer.net/forum"],
+  ["thecardboard","thecardboard.org","https://thecardboard.org/board"],
+  ["therianguide","forums.therian-guide.com","https://forums.therian-guide.com"],
+  ["babeshows","babeshows.co.uk","https://www.babeshows.co.uk"],
+  ["badeggsonline","badeggsonline.com","https://www.badeggsonline.com/beo2-forum"],
+  ["biosmods","bios-mods.com","https://bios-mods.com/forum"],
+  ["blackworldforum","blackworldforum.com","http://blackworldforum.com"],
+  ["blitzortung","forum.blitzortung.org","https://forum.blitzortung.org"],
+  ["bluegrassrivals","bluegrassrivals.com","http://bluegrassrivals.com/forum"],
+  ["cambridgemt","discussion.cambridge-mt.com","https://discussion.cambridge-mt.com"],
+];
+function makeMybb(name, domain, base){
+  return async (email,ctx)=>{
+    const headers = H({Referer:base+"/member.php", Origin:base, Accept:"application/json, text/javascript, */*; q=0.01", "Content-Type":FORM_T});
+    const g = await doFetch(ctx, base+"/member.php", {headers});
+    const t = await bodyText(g);
+    if(t.indexOf("Your request was blocked")>=0 || g.status!==200) return R(null,null,true,"blocked");
+    const m = t.split('var my_post_key = "');
+    if(m.length<2) return R(null,null,true,"no post key");
+    const key = m[1].split('"')[0];
+    headers["X-Requested-With"]="XMLHttpRequest";
+    const r = await doFetch(ctx, base+"/xmlhttp.php?action=email_availability",
+      {method:"POST", headers, body:new URLSearchParams({email, my_post_key:key})});
+    const rt = await bodyText(r);
+    if(rt.indexOf("Your request was blocked")>=0 || r.status!==200) return R(null,null,true,"blocked");
+    if(rt.indexOf("email address that is already in use by another member.")>=0) return R(true);
+    return R(false);
+  };
+}
+MYBB.forEach(f=>def(f[0],f[1],"forum","register", makeMybb(f[0],f[1],f[2])));
+
+/* ===================================================================== *
+ *  runner
+ * ===================================================================== */
+let RUNNING = false, ABORT = false;
+
+function statusOf(res){
+  if(res.rateLimit) return "rate_limited";
+  if(res.exists===true) return "registered";
+  if(res.exists===false) return "not_registered";
+  return "unknown";
+}
+
+async function runOne(spec, email, ctx){
+  const t0 = performance.now();
+  let res, forced=null;
+  try{
+    res = await spec.fn(email, ctx);
+  }catch(e){
+    let msg = (e && e.name==="AbortError") ? "timeout" : (e && e.message ? e.message : "error");
+    if(e && e.name==="TypeError") msg = "blocked (CORS/network)";
+    res = {exists:null, detail:null, rateLimit:false, error:msg};
+    forced = "error";
+  }
+  const st = forced || statusOf(res);
+  const ce = confOf(spec.name);
+  return {name:spec.name, domain:spec.domain, category:spec.category, method:spec.method,
+    status: st, detail: res.detail, error: res.error,
+    confidence: st==="registered" ? ce[0] : "none", evidence: ce[1],
+    verify_url: "https://"+spec.domain,
+    elapsed_ms: Math.round(performance.now()-t0)};
+}
+
+async function runScan(email, ctx, onResult){
+  const q = SITES.slice();
+  const conc = Math.max(1, ctx.concurrency);
+  let active = 0, i = 0;
+  return new Promise(resolve=>{
+    const done = [];
+    function pump(){
+      if(ABORT){ if(active===0) resolve(done); return; }
+      while(active < conc && i < q.length){
+        const spec = q[i++]; active++;
+        runOne(spec, email, ctx).then(r=>{
+          active--; done.push(r); onResult(r);
+          if(done.length===q.length) resolve(done); else pump();
+        });
+      }
+      if(i>=q.length && active===0) resolve(done);
+    }
+    pump();
+  });
+}
+
+/* ---------- demo mode ---------- */
+function demoRun(email, onResult){
+  const seed = Array.from(email).reduce((a,c)=>a+c.charCodeAt(0),0);
+  const q = SITES.slice();
+  return new Promise(resolve=>{
+    const done=[]; let i=0;
+    const timer = setInterval(()=>{
+      if(i>=q.length){ clearInterval(timer); resolve(done); return; }
+      const spec=q[i++];
+      const h = (seed*31 + i*17) % 100;
+      let status="not_registered", detail=null;
+      if(h<18) status="registered";
+      else if(h<34) status="unknown";
+      else if(h<44) status="rate_limited";
+      else if(h<48) status="error";
+      const r={name:spec.name, domain:spec.domain, category:spec.category, method:spec.method,
+        status, detail, error: status==="error"?"simulated":null,
+        confidence: status==="registered" ? confOf(spec.name)[0] : "none",
+        evidence: confOf(spec.name)[1], verify_url:"https://"+spec.domain,
+        elapsed_ms: 50+ (h%400)};
+      done.push(r); onResult(r);
+      if(done.length===q.length){ clearInterval(timer); resolve(done); }
+    }, 12);
+  });
+}
+
+/* ===================================================================== *
+ *  UI
+ * ===================================================================== */
+const $ = id => document.getElementById(id);
+const RESULTS = [];
+let SORT = {k:"status", dir:1};
+
+const ORDER = {"registered":0,"unknown":1,"rate_limited":2,"error":3,"not_registered":4};
+const LABEL = {"registered":"FOUND","not_registered":"—","unknown":"?","rate_limited":"RATE","error":"ERR"};
+
+/* Evidence grading — how strong a hit is, and what kind of proof it rests on.
+   high  = the service returned real account data (profile, recovery contacts).
+   medium= the service explicitly says the address is registered.
+   low   = an inferred/heuristic signal that can be noisy. */
+const CONF_HIGH = {gravatar:1, adobe:1, protonmail:1, odnoklassniki:1};
+const CONF_LOW  = {taringa:1, vsco:1, wattpad:1, ello:1, samsung:1, seoclerks:1, flickr:1};
+function confOf(name){
+  if(CONF_HIGH[name]) return ["high","direct"];
+  if(CONF_LOW[name]) return ["low","inferred"];
+  return ["medium","inferred"];
+}
+function confBadge(c,e){
+  if(!c||c==="none") return '<span class="dom">—</span>';
+  const t = e==="direct" ? "direct account data" : "inferred from an availability response";
+  return '<span class="cf cf-'+c+'" title="'+t+'">'+c+'</span>';
+}
+
+function resetTable(){ RESULTS.length=0; $("tbl").querySelector("tbody").innerHTML=""; $("resultsWrap").classList.remove("hide"); }
+
+function renderRow(r){
+  const tr = document.createElement("tr");
+  tr.dataset.status=r.status; tr.dataset.category=r.category;
+  const url = r.verify_url || ("https://"+r.domain);
+  tr.innerHTML =
+    '<td><span class="st s-'+r.status+'">'+LABEL[r.status]+'</span></td>'+
+    '<td><a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(r.name)+'</a></td>'+
+    '<td class="dom">'+esc(r.domain)+'</td>'+
+    '<td class="dom">'+esc(r.category)+'</td>'+
+    '<td class="dom">'+esc(r.method)+'</td>'+
+    '<td>'+confBadge(r.confidence, r.evidence)+'</td>'+
+    '<td class="det">'+esc(r.detail||r.error||"")+'</td>';
+  return tr;
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function applyFilters(){
+  const onlyFound = $("onlyFound").checked;
+  const cat = $("catFilter").value;
+  const rows = $("tbl").querySelectorAll("tbody tr");
+  rows.forEach(tr=>{
+    let show = true;
+    if(onlyFound && tr.dataset.status!=="registered") show=false;
+    if(cat && tr.dataset.category!==cat) show=false;
+    tr.style.display = show ? "" : "none";
+  });
+}
+
+function sortResults(){
+  const tb = $("tbl").querySelector("tbody");
+  const rows = Array.from(RESULTS).sort((a,b)=>{
+    let ka,kb;
+    if(SORT.k==="status"){ ka=ORDER[a.status]; kb=ORDER[b.status]; }
+    else { ka=String(a[SORT.k]).toLowerCase(); kb=String(b[SORT.k]).toLowerCase(); }
+    if(ka<kb) return -1*SORT.dir; if(ka>kb) return 1*SORT.dir;
+    return a.name.localeCompare(b.name);
+  });
+  tb.innerHTML="";
+  rows.forEach(r=>tb.appendChild(renderRow(r)));
+  applyFilters();
+}
+
+function updateSummary(){
+  const c = {registered:0,not_registered:0,unknown:0,rate_limited:0,error:0};
+  RESULTS.forEach(r=>c[r.status]++);
+  const total = RESULTS.length;
+  $("chips").innerHTML =
+    chip("registered", c.registered, "found") + chip("not_registered", c.not_registered, "clean") +
+    chip("unknown", c.unknown, "inconclusive") + chip("rate_limited", c.rate_limited, "rate-limited") +
+    chip("error", c.error, "errors") +
+    '<span class="chip">of <b>'+total+'</b> sites</span>';
+}
+function chip(st,n,label){ return '<span class="chip"><b style="color:var(--'+({registered:"found",not_registered:"clean",unknown:"unk",rate_limited:"rate",error:"err"}[st])+')">'+n+'</b> '+label+'</span>'; }
+
+function populateCats(){
+  const cats = Array.from(new Set(SITES.map(s=>s.category))).sort();
+  const sel = $("catFilter");
+  sel.innerHTML = '<option value="">all categories</option>' + cats.map(c=>'<option value="'+c+'">'+c+'</option>').join("");
+}
+
+async function onRun(){
+  const email = $("email").value.trim();
+  if(!email){ $("status").textContent="Enter an email address."; return; }
+  const mode = $("mode").value;
+  const proxy = $("proxy").value.trim();
+  if(mode==="live" && !proxy){
+    $("status").innerHTML = 'Live mode needs a CORS proxy — or use Backend mode. ';
+    if(!confirm("No CORS proxy set. Browser cross-origin rules will block most requests and live checks will mostly fail.\n\nContinue anyway?")) return;
+  }
+  if(mode==="backend" && !$("backend").value.trim() && location.protocol==="file:"){
+    $("status").innerHTML = 'Backend mode needs a server URL (e.g. http://127.0.0.1:8777). ';
+    if(!confirm("No backend URL set and this page was opened from a file. Start server.py and enter its URL above.\n\nContinue anyway?")) return;
+  }
+  resetTable(); ABORT=false; RUNNING=true;
+  $("run").disabled=true; $("stop").disabled=false;
+  const ctx = {proxy, timeout: Math.max(3, +$("timeout").value||12)*1000, concurrency: Math.max(1,+$("conc").value||20)};
+
+  let n=0;
+  const total = SITES.length;
+  const onResult = r=>{ RESULTS.push(r); n++; $("prog").style.width=(100*n/total)+"%";
+    $("status").innerHTML = '<span class="spin"></span> '+n+'/'+total+' checked…';
+    // stream into table live (sorted at end)
+  };
+
+  if(mode==="backend"){
+    const base = ($("backend").value.trim() || location.origin).replace(/\/+$/,"");
+    $("status").innerHTML = '<span class="spin"></span> contacting backend…';
+    let ok=false;
+    try{
+      const u = base+"/api/check?email="+encodeURIComponent(email)
+              + "&concurrency="+ctx.concurrency+"&timeout="+Math.round(ctx.timeout/1000);
+      const resp = await fetch(u);
+      if(!resp.ok) throw new Error("HTTP "+resp.status);
+      const data = await resp.json();
+      (data.results||[]).forEach(onResult);
+      ok=true;
+    }catch(e){
+      $("status").innerHTML = 'Backend error: '+esc(e.message)+' — is <code>server.py</code> running at '+esc(base)+'?';
+    }
+    RUNNING=false; $("run").disabled=false; $("stop").disabled=true;
+    if(ok){
+      $("prog").style.width="100%";
+      sortResults(); updateSummary();
+      const f = RESULTS.filter(r=>r.status==="registered").length;
+      $("status").innerHTML = "Done (backend). "+f+" hit(s) across "+RESULTS.length+" sites.";
+    }
+    return;
+  }
+
+  let done;
+  if(mode==="demo"){ done = await demoRun(email, onResult); }
+  else { done = await runScan(email, ctx, onResult); }
+
+  RUNNING=false; $("run").disabled=false; $("stop").disabled=true;
+  $("prog").style.width="100%";
+  sortResults(); updateSummary();
+  const found = RESULTS.filter(r=>r.status==="registered").length;
+  $("status").innerHTML = (ABORT? "Stopped. ":"Done. ") + found + " hit(s) found across " + RESULTS.length + " sites.";
+}
+
+function onStop(){ ABORT=true; $("status").textContent="Stopping…"; }
+
+/* export */
+function download(name, text, type){
+  const blob = new Blob([text], {type:type||"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+function exportJSON(){
+  const email = $("email").value.trim();
+  download("emailrecon-results.json", JSON.stringify({email, results:RESULTS}, null, 2));
+}
+function exportCSV(){
+  const cols=["name","domain","category","method","status","confidence","evidence","verify_url","detail","error","elapsed_ms"];
+  const esc2=v=>{ v=(v==null?"":String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const rows=[cols.join(",")].concat(RESULTS.map(r=>cols.map(c=>esc2(r[c])).join(",")));
+  download("emailrecon-results.csv", rows.join("\n"), "text/csv");
+}
+
+/* import */
+function importJSON(file){
+  const fr = new FileReader();
+  fr.onload=()=>{
+    try{
+      const data = JSON.parse(fr.result);
+      const results = Array.isArray(data) ? data : (data.results||[]);
+      if(!results.length) throw new Error("no results array");
+      resetTable();
+      RESULTS.length=0;
+      results.forEach(r=>RESULTS.push({name:r.name,domain:r.domain,category:r.category||"",method:r.method||"",
+        status:r.status||"unknown",detail:r.detail,error:r.error,elapsed_ms:r.elapsed_ms||0,
+        confidence:r.confidence||"none",evidence:r.evidence||"inferred",verify_url:r.verify_url}));
+      if(data.email) $("email").value=data.email;
+      sortResults(); updateSummary();
+      $("status").textContent="Imported "+RESULTS.length+" results.";
+    }catch(e){ $("status").textContent="Import failed: "+e.message; }
+  };
+  fr.readAsText(file);
+}
+
+/* wire up */
+populateCats();
+$("run").addEventListener("click", onRun);
+$("stop").addEventListener("click", onStop);
+$("onlyFound").addEventListener("change", applyFilters);
+$("catFilter").addEventListener("change", applyFilters);
+$("expjson").addEventListener("click", exportJSON);
+$("expcsv").addEventListener("click", exportCSV);
+$("impbtn").addEventListener("click", ()=>$("impfile").click());
+$("impfile").addEventListener("change", e=>{ if(e.target.files[0]) importJSON(e.target.files[0]); });
+document.querySelectorAll("th").forEach(th=>th.addEventListener("click", ()=>{
+  const k=th.dataset.k; SORT.dir = (SORT.k===k)? -SORT.dir : 1; SORT.k=k; sortResults();
+}));
+$("email").addEventListener("keydown", e=>{ if(e.key==="Enter") onRun(); });
+</script>
+</body>
+</html>
