@@ -39,7 +39,7 @@ HTML_PATH = os.path.join(HERE, "emailrecon.html")
 
 
 def _load_html() -> bytes:
-    with open(HTML_PATH, "r", encoding="utf-8") as fh:
+    with open(HTML_PATH, encoding="utf-8") as fh:
         return fh.read().encode("utf-8")
 
 
