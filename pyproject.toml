@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emailrecon"
+version = "1.0.0"
+description = "Parallel email OSINT: check an address across 116 public websites."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+    "httpx>=0.24",
+    "beautifulsoup4>=4.11",
+]
+
+[project.scripts]
+emailrecon = "emailrecon.cli:main"
+
+[tool.setuptools]
+packages = ["emailrecon"]
