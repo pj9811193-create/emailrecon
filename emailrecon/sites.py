@@ -25,7 +25,6 @@ from bs4 import BeautifulSoup
 
 from .engine import SiteSpec, chrome_ua, firefox_ua, rand_token, site
 
-
 # --------------------------------------------------------------------------- #
 # Small helpers
 # --------------------------------------------------------------------------- #
@@ -645,15 +644,11 @@ async def rambler(email, client):
 @site("office365", "office365.com", "mail", "other", confidence="medium", evidence="direct", verify="https://login.microsoftonline.com/")
 async def office365(email, client):
     domain = email.split("@")[-1]
-    url = "https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/{}?Protocol=Autodiscoverv1".format(
-        email
-    )
+    url = f"https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/{email}?Protocol=Autodiscoverv1"
     r = await client.get(url, headers=H(accept=JSON))
     if r.status_code != 200:
         r = await client.get(
-            "https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/{}?Protocol=Autodiscoverv1".format(
-                domain
-            ),
+            f"https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/{domain}?Protocol=Autodiscoverv1",
             headers=H(accept=JSON),
         )
     if r.status_code == 200:

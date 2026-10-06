@@ -23,8 +23,8 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import httpx
 
@@ -77,12 +77,12 @@ class SiteResult:
     category: str
     method: str
     status: str
-    detail: Optional[str] = None
-    error: Optional[str] = None
+    detail: str | None = None
+    error: str | None = None
     elapsed_ms: int = 0
     confidence: str = "medium"   # high | medium | low  (strength of a hit)
     evidence: str = "inferred"   # direct | inferred     (kind of proof)
-    verify_url: Optional[str] = None
+    verify_url: str | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -111,7 +111,7 @@ class SiteSpec:
     method: str = "register"
     confidence: str = "medium"   # how strong a positive from this check is
     evidence: str = "inferred"   # direct account data, or an inferred signal
-    verify: Optional[str] = None  # URL a human can open to confirm a hit
+    verify: str | None = None  # URL a human can open to confirm a hit
 
 
 def site(
@@ -121,7 +121,7 @@ def site(
     method: str = "register",
     confidence: str = "medium",
     evidence: str = "inferred",
-    verify: Optional[str] = None,
+    verify: str | None = None,
 ):
     """Decorator that turns a checker function into a registered SiteSpec."""
 
@@ -176,9 +176,9 @@ class RunConfig:
     concurrency: int = 30
     timeout: float = 15.0
     retries: int = 1
-    proxies: Optional[str] = None
+    proxies: str | None = None
     verbose: bool = False
-    on_result: Optional[Callable[[SiteResult], None]] = None
+    on_result: Callable[[SiteResult], None] | None = None
 
 
 def build_client(cfg: RunConfig) -> httpx.AsyncClient:
@@ -205,7 +205,7 @@ async def _run_one(
     cfg: RunConfig,
 ) -> SiteResult:
     started = time.perf_counter()
-    result: Optional[dict] = None
+    result: dict | None = None
     last_error = None
 
     for attempt in range(cfg.retries + 1):
@@ -263,8 +263,8 @@ async def _run_one(
 
 async def run(
     email: str,
-    specs: Optional[list[SiteSpec]] = None,
-    cfg: Optional[RunConfig] = None,
+    specs: list[SiteSpec] | None = None,
+    cfg: RunConfig | None = None,
 ) -> list[SiteResult]:
     """Check ``email`` against every site in parallel. Returns all results."""
     cfg = cfg or RunConfig()
@@ -278,7 +278,7 @@ async def run(
 
 def run_sync(
     email: str,
-    specs: Optional[list[SiteSpec]] = None,
-    cfg: Optional[RunConfig] = None,
+    specs: list[SiteSpec] | None = None,
+    cfg: RunConfig | None = None,
 ) -> list[SiteResult]:
     return asyncio.run(run(email, specs=specs, cfg=cfg))

@@ -1,5 +1,9 @@
 # emailrecon
 
+[![CI](https://github.com/pj9811193-create/emailrecon/actions/workflows/ci.yml/badge.svg)](https://github.com/pj9811193-create/emailrecon/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-3fb950.svg)](https://pj9811193-create.github.io/emailrecon/)
+
 Parallel **email OSINT** — check whether an email address is registered across
 **116 public websites** at once, and print the ones that hit.
 

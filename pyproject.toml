@@ -17,5 +17,16 @@ dependencies = [
 [project.scripts]
 emailrecon = "emailrecon.cli:main"
 
+[project.optional-dependencies]
+dev = ["ruff>=0.5"]
+
 [tool.setuptools]
 packages = ["emailrecon"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
